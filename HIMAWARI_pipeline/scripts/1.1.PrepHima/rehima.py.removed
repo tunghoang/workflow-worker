@@ -1,0 +1,207 @@
+from osgeo import gdal, osr
+import numpy as np
+import glob, os, shutil
+import datetime
+
+
+
+# input_folder = r'/home/ubuntu/workspace/software/input_data/1.Himawari8'
+
+# output_folder = r'/home/ubuntu/workspace/software/output_data/1.1.PrepHima/mins'
+
+# time_str = "20201018_04"
+
+
+def img_process_mins_old(input_folder, output_folder, time_str, logger):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        
+    temporal_folder = output_folder
+    
+
+    timeInfo = datetime.datetime.strptime(time_str, '%Y%m%d_%H')
+    
+
+    s_time = timeInfo - datetime.timedelta(minutes=50)
+    c_time = s_time
+    while c_time <= timeInfo:
+
+        year = str(c_time.year).zfill(4)
+        month = str(c_time.month).zfill(2)
+        day = str(c_time.day).zfill(2)
+        hour = str(c_time.hour).zfill(2)
+        minute = str(c_time.minute).zfill(2)
+
+        list_bands = ['B09B', 'B10B', 'B11B', 'B12B', 'B14B', 'B16B', 'I2B', 'I4B', 'IRB', 'WVB']
+
+        for band in list_bands:
+
+            filepath = input_folder + f'/{band}/{year}/{month}/{day}/{band}_{year}{month}{day}.Z{hour}{minute}.nc'
+            outpath = output_folder + f'/{band}/{year}/{month}/{day}/{band}_{year}{month}{day}.Z{hour}{minute}.BTB.tif'
+
+            if len(list(glob.iglob(filepath.replace('.nc', '.*')))) > 0:
+                logger.warning(f"Dữ liệu thô Himawari-8 không đúng định dạng: {filepath.replace('.nc', '.*')}")
+
+
+            if not os.path.exists(filepath):
+                logger.warning(f"Dữ liệu thô Himawari-8 không tồn tại: {filepath}")
+                continue
+            
+
+            if os.path.exists(outpath):
+                continue
+
+            if not os.path.exists(output_folder + f'/{band}/{year}/{month}/{day}'):
+                os.makedirs(output_folder + f'/{band}/{year}/{month}/{day}')
+
+
+            print(filepath)
+            # lay band calibration
+            sds_path = 'NETCDF:"{}":calibration'.format(filepath)
+
+            # doc data
+            ds = gdal.Open(sds_path, gdal.GA_ReadOnly)\
+            
+            # bo qua cac file netcdf bi error, kich thuoc file netcdf chi co 11kb
+            if ds is None:
+                continue
+
+            data = ds.ReadAsArray()
+
+            rows, cols = data.shape
+            geo_t = ds.GetGeoTransform()
+
+            # tao file tif region
+            # Cac file luu theo cau truc region/band/year/month/day/*.tif
+
+            region_path = temporal_folder + f'{band}_{year}{month}{day}.Z{hour}{minute}.region.tif'
+
+
+            dst_ds = gdal.GetDriverByName('GTiff').Create(region_path, data.shape[1], data.shape[0], 1, gdal.GDT_Float32)
+            outRasterSRS = osr.SpatialReference()
+            outRasterSRS.ImportFromEPSG(4326)
+            dst_ds.SetProjection(outRasterSRS.ExportToWkt())
+            dst_ds.SetGeoTransform((94.98, 0.04, 0, 39.98, 0, -0.04))
+            # dst_ds.SetGeoTransform(geo_t)
+            dst_ds.GetRasterBand(1).WriteArray(data)
+            dst_ds.GetRasterBand(1).SetNoDataValue(-8.9999999e+33)
+            dst_ds.FlushCache()
+            dst_ds=None
+
+
+
+            gdal.Warp(
+                outpath,
+                region_path,
+                format = "GTiff",
+                dstSRS = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs",
+                xRes = 0.04, yRes = -0.04,
+                outputBounds = (101, 17.5, 111, 21.1),
+                resampleAlg = "near",
+                creationOptions = ['COMPRESS=LZW'],
+            )
+            
+      
+            #file anh region kha to, neu khong can luu co the xoa
+            os.remove(region_path)
+
+
+        c_time = c_time + datetime.timedelta(minutes=10)
+
+def img_process_mins(input_folder, output_folder, time_str, logger):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        
+    temporal_folder = output_folder
+    
+
+    timeInfo = datetime.datetime.strptime(time_str, '%Y%m%d_%H')
+    
+
+    s_time = timeInfo - datetime.timedelta(minutes=50)
+    c_time = s_time
+    while c_time <= timeInfo:
+
+        year = str(c_time.year).zfill(4)
+        month = str(c_time.month).zfill(2)
+        day = str(c_time.day).zfill(2)
+        hour = str(c_time.hour).zfill(2)
+        minute = str(c_time.minute).zfill(2)
+
+        list_bands = ['B09B', 'B10B', 'B11B', 'B12B', 'B14B', 'B16B', 'I2B', 'I4B', 'IRB', 'WVB']
+
+        for band in list_bands:
+
+            filepath = input_folder + f'/{band}/{year}/{month}/{day}/{band}_{year}{month}{day}.Z{hour}{minute}.nc'
+            outpath = output_folder + f'/{band}/{year}/{month}/{day}/{band}_{year}{month}{day}.Z{hour}{minute}.BTB.tif'
+
+            if len(list(glob.iglob(filepath.replace('.nc', '.*')))) > 0:
+                logger.warning(f"Dữ liệu thô Himawari-8 không đúng định dạng: {filepath.replace('.nc', '.*')}")
+
+
+            if not os.path.exists(filepath):
+                logger.warning(f"Dữ liệu thô Himawari-8 không tồn tại: {filepath}")
+                continue
+            
+
+            if os.path.exists(outpath):
+                continue
+
+            if not os.path.exists(output_folder + f'/{band}/{year}/{month}/{day}'):
+                os.makedirs(output_folder + f'/{band}/{year}/{month}/{day}')
+
+
+            print(filepath)
+            # lay band calibration
+            sds_path = 'NETCDF:"{}":calibration'.format(filepath)
+
+            # doc data
+            ds = gdal.Open(sds_path, gdal.GA_ReadOnly)\
+            
+            # bo qua cac file netcdf bi error, kich thuoc file netcdf chi co 11kb
+            if ds is None:
+                continue
+
+            data = ds.ReadAsArray()
+
+            rows, cols = data.shape
+            geo_t = ds.GetGeoTransform()
+
+            # tao file tif region
+            # Cac file luu theo cau truc region/band/year/month/day/*.tif
+
+            region_path = temporal_folder + f'{band}_{year}{month}{day}.Z{hour}{minute}.region.tif'
+
+
+            dst_ds = gdal.GetDriverByName('GTiff').Create(region_path, data.shape[1], data.shape[0], 1, gdal.GDT_Float32)
+            outRasterSRS = osr.SpatialReference()
+            outRasterSRS.ImportFromEPSG(4326)
+            dst_ds.SetProjection(outRasterSRS.ExportToWkt())
+            dst_ds.SetGeoTransform((94.98, 0.04, 0, 39.98, 0, -0.04))
+            # dst_ds.SetGeoTransform(geo_t)
+            dst_ds.GetRasterBand(1).WriteArray(data)
+            dst_ds.GetRasterBand(1).SetNoDataValue(-8.9999999e+33)
+            dst_ds.FlushCache()
+            dst_ds=None
+
+
+
+            gdal.Warp(
+                outpath,
+                region_path,
+                format = "GTiff",
+                dstSRS = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs",
+                xRes = 0.04, yRes = -0.04,
+                outputBounds = (101, 17.5, 111, 21.1),
+                resampleAlg = "near",
+                creationOptions = ['COMPRESS=LZW'],
+            )
+            
+      
+            #file anh region kha to, neu khong can luu co the xoa
+            os.remove(region_path)
+
+
+        c_time = c_time + datetime.timedelta(minutes=10)
+        
+
